@@ -17,7 +17,6 @@ def handle_large_upload(e):
 def format_image(file_stream, mode="Fill", canvas_size=1000):
     img = Image.open(file_stream).convert("RGBA")
     w, h = img.size
-
     if mode == "Fill":
         scale = max(canvas_size / w, canvas_size / h)
         new_size = (int(w * scale), int(h * scale))
@@ -31,7 +30,6 @@ def format_image(file_stream, mode="Fill", canvas_size=1000):
         offset = ((canvas_size - img.width) // 2, (canvas_size - img.height) // 2)
         background.paste(img, offset, img)
         img = background
-
     return img.convert("RGB")
 
 @app.route("/format", methods=["POST"])
@@ -47,22 +45,19 @@ def format_route():
         for file in images:
             if not file.filename:
                 continue
-
             try:
                 processed = format_image(file, fill_mode)
             except (UnidentifiedImageError, OSError):
                 continue
-
             base_name, ext = os.path.splitext(file.filename)
             ext = ext.lower().replace('.', '')
             img_format = "JPEG" if ext in ["jpg", "jpeg"] else "PNG"
-
             buffer = io.BytesIO()
             processed.save(buffer, format=img_format)
             buffer.seek(0)
             zipf.writestr(f"{base_name}_formatted.{ext}", buffer.read())
-
     zip_stream.seek(0)
+
     return send_file(
         zip_stream,
         as_attachment=True,
@@ -71,5 +66,5 @@ def format_route():
     )
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))  # ✅ Azure-compatible
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
