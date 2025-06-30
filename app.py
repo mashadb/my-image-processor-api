@@ -20,10 +20,9 @@ def format_image(stream, mode="Fill", size=1000):
 
     if mode == "Fill":
         scale = max(size / w, size / h)
-        new_w, new_h = int(w * scale), int(h * scale)
-        img = img.resize((new_w, new_h), Image.LANCZOS)
-        left = (new_w - size) // 2
-        top = (new_h - size) // 2
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        left = (img.width - size) // 2
+        top = (img.height - size) // 2
         img = img.crop((left, top, left + size, top + size))
     else:
         img.thumbnail((int(size * 0.92), int(size * 0.92)), Image.LANCZOS)
@@ -42,8 +41,8 @@ def format_endpoint():
 
     mode = request.form.get('fill_mode', 'Fill')
     files = request.files.getlist('images')
-
     zip_stream = io.BytesIO()
+
     with zipfile.ZipFile(zip_stream, "w") as zipf:
         for file in files:
             if not file.filename:
@@ -59,7 +58,12 @@ def format_endpoint():
                 continue
 
     zip_stream.seek(0)
-    return send_file(zip_stream, as_attachment=True, download_name="formatted_images.zip", mimetype="application/zip")
+    return send_file(
+        zip_stream,
+        as_attachment=True,
+        download_name="formatted_images.zip",
+        mimetype="application/zip"
+    )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
