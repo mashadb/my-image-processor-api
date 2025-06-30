@@ -1,5 +1,5 @@
 Flask
 Pillow
 gunicorn
-werkzeug # Explicitly include this as ProxyFix is used
-gevent # If you plan to use 'worker-class gevent' in your startup command
+gevent
+werkzeug
