@@ -2,68 +2,64 @@ from flask import Flask, request, send_file, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.exceptions import RequestEntityTooLarge
 from PIL import Image, UnidentifiedImageError
-import os
 import io
+import os
 import zipfile
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app)
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_large_upload(e):
-    return jsonify({'error': 'Uploaded data is too large. Max 100MB.'}), 413
+    return jsonify({'error': 'Uploaded file too large. Max is 100MB'}), 413
 
-def format_image(file_stream, mode="Fill", canvas_size=1000):
-    img = Image.open(file_stream).convert("RGBA")
+def format_image(stream, mode="Fill", size=1000):
+    img = Image.open(stream).convert("RGBA")
     w, h = img.size
+
     if mode == "Fill":
-        scale = max(canvas_size / w, canvas_size / h)
-        new_size = (int(w * scale), int(h * scale))
-        img = img.resize(new_size, Image.LANCZOS)
-        left = (img.width - canvas_size) // 2
-        top = (img.height - canvas_size) // 2
-        img = img.crop((left, top, left + canvas_size, top + canvas_size))
-    else:  # Fit mode
-        img.thumbnail((int(canvas_size * 0.92), int(canvas_size * 0.92)), Image.LANCZOS)
-        background = Image.new("RGBA", (canvas_size, canvas_size), (255, 255, 255, 255))
-        offset = ((canvas_size - img.width) // 2, (canvas_size - img.height) // 2)
-        background.paste(img, offset, img)
+        scale = max(size / w, size / h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+        left = (new_w - size) // 2
+        top = (new_h - size) // 2
+        img = img.crop((left, top, left + size, top + size))
+    else:
+        img.thumbnail((int(size * 0.92), int(size * 0.92)), Image.LANCZOS)
+        background = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+        x = (size - img.width) // 2
+        y = (size - img.height) // 2
+        background.paste(img, (x, y), img)
         img = background
+
     return img.convert("RGB")
 
 @app.route("/format", methods=["POST"])
-def format_route():
+def format_endpoint():
     if 'images' not in request.files:
-        return jsonify({"error": "No images uploaded"}), 400
+        return jsonify({'error': 'No images uploaded'}), 400
 
-    images = request.files.getlist("images")
-    fill_mode = request.form.get("fill_mode", "Fill")
+    mode = request.form.get('fill_mode', 'Fill')
+    files = request.files.getlist('images')
 
     zip_stream = io.BytesIO()
     with zipfile.ZipFile(zip_stream, "w") as zipf:
-        for file in images:
+        for file in files:
             if not file.filename:
                 continue
             try:
-                processed = format_image(file, fill_mode)
+                output = io.BytesIO()
+                formatted = format_image(file.stream, mode)
+                ext = os.path.splitext(file.filename)[1].lower().strip('.') or 'jpg'
+                formatted.save(output, format="JPEG" if ext in ['jpg', 'jpeg'] else 'PNG')
+                output.seek(0)
+                zipf.writestr(f"{os.path.splitext(file.filename)[0]}_formatted.{ext}", output.read())
             except (UnidentifiedImageError, OSError):
                 continue
-            base_name, ext = os.path.splitext(file.filename)
-            ext = ext.lower().replace('.', '')
-            img_format = "JPEG" if ext in ["jpg", "jpeg"] else "PNG"
-            buffer = io.BytesIO()
-            processed.save(buffer, format=img_format)
-            buffer.seek(0)
-            zipf.writestr(f"{base_name}_formatted.{ext}", buffer.read())
-    zip_stream.seek(0)
 
-    return send_file(
-        zip_stream,
-        as_attachment=True,
-        download_name="formatted_images.zip",
-        mimetype="application/zip"
-    )
+    zip_stream.seek(0)
+    return send_file(zip_stream, as_attachment=True, download_name="formatted_images.zip", mimetype="application/zip")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
