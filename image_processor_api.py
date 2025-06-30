@@ -25,7 +25,7 @@ def format_image(file_stream, mode="Fill", canvas_size=1000):
         left = (img.width - canvas_size) // 2
         top = (img.height - canvas_size) // 2
         img = img.crop((left, top, left + canvas_size, top + canvas_size))
-    else: # This will act as "Fit" mode
+    else:  # Fit mode
         img.thumbnail((int(canvas_size * 0.92), int(canvas_size * 0.92)), Image.LANCZOS)
         background = Image.new("RGBA", (canvas_size, canvas_size), (255, 255, 255, 255))
         offset = ((canvas_size - img.width) // 2, (canvas_size - img.height) // 2)
@@ -40,7 +40,7 @@ def format_route():
         return jsonify({"error": "No images uploaded"}), 400
 
     images = request.files.getlist("images")
-    fill_mode = request.form.get("fill_mode", "Fill") # Default to "Fill" if not specified
+    fill_mode = request.form.get("fill_mode", "Fill")
 
     zip_stream = io.BytesIO()
     with zipfile.ZipFile(zip_stream, "w") as zipf:
@@ -51,18 +51,16 @@ def format_route():
             try:
                 processed = format_image(file, fill_mode)
             except (UnidentifiedImageError, OSError):
-                # Skip unsupported formats like .avif or corrupt files
-                continue 
+                continue
 
             base_name, ext = os.path.splitext(file.filename)
             ext = ext.lower().replace('.', '')
-            img_format = "JPEG" if ext in ["jpg", "jpeg"] else "PNG" # Standardize to JPEG or PNG
+            img_format = "JPEG" if ext in ["jpg", "jpeg"] else "PNG"
 
             buffer = io.BytesIO()
             processed.save(buffer, format=img_format)
             buffer.seek(0)
-
-            zipf.writestr(file.filename, buffer.read())
+            zipf.writestr(f"{base_name}_formatted.{ext}", buffer.read())
 
     zip_stream.seek(0)
     return send_file(
@@ -73,4 +71,5 @@ def format_route():
     )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 8080))  # ✅ Azure-compatible
+    app.run(host="0.0.0.0", port=port)
